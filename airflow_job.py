@@ -46,6 +46,9 @@ with DAG(
     batch_details = {
         "pyspark_batch": {
             "main_python_file_uri": f"gs://credit-card-data-analysis-dir/spark_job/spark_job.py",
+            "jar_file_uris": [
+                            "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.40.0.jar"
+                            ],
              "args":[ 
                     "gs://credit-card-data-analysis-dir/transactions/transactions_*.json"
                     ]
