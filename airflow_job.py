@@ -45,7 +45,10 @@ with DAG(
     # Task 2: Submit PySpark job to Dataproc Serverless
     batch_details = {
         "pyspark_batch": {
-            "main_python_file_uri": f"gs://credit-card-data-analysis-dir/spark_job/spark_job.py"
+            "main_python_file_uri": f"gs://credit-card-data-analysis-dir/spark_job/spark_job.py",
+             "args":[ 
+                    f"gs://{gcs_bucket}/{file_pattern}*.json"
+                    ]
         },
         "runtime_config": {
             "version": "2.2",
