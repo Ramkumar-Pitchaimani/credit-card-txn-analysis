@@ -47,7 +47,7 @@ with DAG(
         "pyspark_batch": {
             "main_python_file_uri": f"gs://credit-card-data-analysis-dir/spark_job/spark_job.py",
              "args":[ 
-                    f"gs://{gcs_bucket}/{file_pattern}*.json"
+                    "gs://credit-card-data-analysis-dir/transactions/transactions_*.json"
                     ]
         },
         "runtime_config": {
