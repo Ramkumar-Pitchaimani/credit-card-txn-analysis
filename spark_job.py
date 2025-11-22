@@ -1,22 +1,19 @@
 import sys
+import glob
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import (
     col, when, lit, to_timestamp, concat, round as spark_round
 )
 
 # -----------------------------------------------------------------------------
-#c Core processing function - test 1
+# Processing Logic
 # -----------------------------------------------------------------------------
 def process_transactions(
     trans_df: DataFrame,
     cardholders_df: DataFrame,
     time_format: str = "HH:mm:ss"
 ) -> DataFrame:
-    """
-    Apply validations, transformations, enrichment, and formatting
-    to a transactions DataFrame, returning the enriched DataFrame.
-    """
-    # 1) Validations
+
     df = trans_df.filter(
         (col("transaction_amount") > 0) &
         (col("transaction_status").isin("SUCCESS", "FAILED", "PENDING")) &
@@ -24,7 +21,6 @@ def process_transactions(
         col("merchant_id").isNotNull()
     )
 
-    # 2) Category, timestamp, high_risk, merchant_info
     df = (
         df.withColumn(
             "transaction_category",
@@ -45,16 +41,13 @@ def process_transactions(
         )
     )
 
-    # 3) Enrich with cardholders
     df = df.join(cardholders_df, on="cardholder_id", how="left")
 
-    # 4) Update reward points
     df = df.withColumn(
         "updated_reward_points",
         col("reward_points") + spark_round(col("transaction_amount") / 10)
     )
 
-    # 5) Fraud risk level
     df = df.withColumn(
         "fraud_risk_level",
         when(col("high_risk"), lit("Critical"))
@@ -66,31 +59,56 @@ def process_transactions(
 
 
 # -----------------------------------------------------------------------------
-# Standalone job entrypoint
+# Main Entrypoint
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Initialize Spark
+
     spark = SparkSession.builder \
         .appName("Advanced Credit Card Transactions Processor") \
         .getOrCreate()
 
-    # Paths and BigQuery tables
-    json_file_path = sys.argv[1] if len(sys.argv) > 1 else 'gs://credit-card-data-analysis-dir/transactions/transactions_*.json'
-    BQ_PROJECT_ID = "p101-473210"
-    BQ_DATASET = "credit_card"
-    BQ_CARDHOLDERS_TABLE = f"{BQ_PROJECT_ID}.{BQ_DATASET}.cardholders_tb"
-    BQ_TRANSACTIONS_TABLE = f"{BQ_PROJECT_ID}.{BQ_DATASET}.transactions"
+    # -------------------------
+    # 1. INPUT PATH HANDLING
+    # -------------------------
+    # Airflow passes entire folder path now
+    input_folder = sys.argv[1] if len(sys.argv) > 1 else "gs://credit-card-data-analysis-dir/transactions/"
 
-    # Load data
+    # Convert to wildcard path for reading
+    json_path = input_folder.rstrip("/") + "/*.json"
+
+    print(f"[INFO] Reading JSON files from: {json_path}")
+
+    # -------------------------
+    # 2. Load BigQuery Lookup Table
+    # -------------------------
+    BQ_PROJECT = "p101-473210"
+    BQ_DATASET = "credit_card"
+    BQ_CARDHOLDERS_TABLE = f"{BQ_PROJECT}.{BQ_DATASET}.cardholders_tb"
+    BQ_TRANSACTIONS_TABLE = f"{BQ_PROJECT}.{BQ_DATASET}.transactions"
+
     cardholders_df = spark.read.format("bigquery") \
         .option("table", BQ_CARDHOLDERS_TABLE) \
         .load()
-    transactions_df = spark.read.option("multiline","true").json(json_file_path)
 
-    # Process
+    # -------------------------
+    # 3. Load JSON files with schema inference protection
+    # -------------------------
+    try:
+        transactions_df = spark.read.option("multiline", "true").json(json_path)
+    except Exception as e:
+        print("[ERROR] Failed to load JSON — likely no files in folder")
+        raise
+
+    print(f"[INFO] Loaded {transactions_df.count()} transaction records")
+
+    # -------------------------
+    # 4. Process Transformation
+    # -------------------------
     enriched_df = process_transactions(transactions_df, cardholders_df)
 
-    # Write to BigQuery
+    # -------------------------
+    # 5. Write Back to BigQuery
+    # -------------------------
     enriched_df.write.format("bigquery") \
         .option("table", BQ_TRANSACTIONS_TABLE) \
         .option("temporaryGcsBucket", "bq-temp-p101-473210") \
@@ -98,5 +116,5 @@ if __name__ == "__main__":
         .option("writeDisposition", "WRITE_APPEND") \
         .save()
 
-    print("Advanced Transactions Processing Completed!")
+    print("Advanced Transactions Processing Completed Successfully!")
     spark.stop()
