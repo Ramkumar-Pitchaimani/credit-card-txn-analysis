@@ -40,16 +40,24 @@ with DAG(
     batch_details = {
         "pyspark_batch": {
             "main_python_file_uri": "gs://credit-card-data-analysis-dir/spark_job/spark_job.py",
-            #"jar_file_uris": [
-            #    "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.40.0.jar"
-            #],
+            "jar_file_uris": [
+               "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.36.1.jar"
+            ],
             # <-- Option-1: folder only, no wildcard
             "args": [
                 "gs://credit-card-data-analysis-dir/transactions/"
             ],
         },
-        "runtime_config": {
-            "version": "2.2",
+        #"runtime_config": {
+        #    "version": "2.2",
+        #},
+         "runtime_config": {
+            "version": "2.0",
+            "properties": {
+            "spark.executor.cores": "4",
+            "spark.executor.instances": "2",
+            "spark.driver.cores": "4"
+            }
         },
         "environment_config": {
             "execution_config": {
